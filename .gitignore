@@ -1,5 +1,6 @@
 testsize.c
 *.img
+*.txt
 
 # Object files
 *.o
