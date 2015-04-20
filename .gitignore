@@ -1,3 +1,6 @@
+testsize.c
+*.img
+
 # Object files
 *.o
 *.ko
