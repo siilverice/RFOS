@@ -9,7 +9,7 @@
 #include <errno.h>
 
 
-int seek_meta =  0;
+int seek_meta =  30;
 int seek_data =  0;
 int num_disk = 0;
 char* disk[4] = {NULL};
@@ -59,7 +59,7 @@ static gboolean on_handle_put (
                 stat(src, &st);
                 file_size = (int) st.st_size;
 
-                if (file_size <= ((80*disk_size)/100)-seek_data)
+                if (file_size <= ((80*disk_size)/100)-seek_data && ((20*disk_size)/100)-seek_meta >= 24 )
                 {
                     //get size of disk
                     printf("%s size: %d bytes\n", disk[i],disk_size);
@@ -119,6 +119,14 @@ static gboolean on_handle_put (
                     fseek( fp, seek_data+start, SEEK_SET );
                     fprintf(fp, data->str);
                     
+                    //write " seek_meta,seekdata " to first 8 bytes
+                    fseek( fp, 0, SEEK_SET );
+                    fprintf(fp, "%d", seek_meta);
+                    
+                    //write data
+                    fseek( fp, 15, SEEK_SET );
+                    fprintf(fp, "%d", seek_data);
+
                     fclose(fp);
                     
                     printf("seek_meta = %d\nseek_data = %d\n", seek_meta,seek_data+start);
@@ -137,6 +145,7 @@ static gboolean on_handle_put (
         }
         seek_meta = seek_meta + str->len;
         seek_data = seek_data + file_size;
+
     }
     else if (num_disk==4)
     {
