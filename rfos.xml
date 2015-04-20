@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<node name="/" xmlns:doc="http://www.freedesktop.org/dbus/1.0/doc.dtd">
+  <interface name="kmitl.ce.os.RFOS">
+
+    <method name="Put">
+      <arg name="key" type="s" direction="in" />
+      <arg name="src" type="s" direction="in" />
+      <arg name="err" type="u" direction="out" />
+    </method>
+
+    <method name="Get">
+      <arg name="key" type="s" direction="in" />
+      <arg name="outpath" type="s" direction="in" />
+      <arg name="err" type="u" direction="out" />
+    </method>
+
+    <method name="Remove">
+      <arg name="key" type="s" direction="in" />
+      <arg name="err" type="u" direction="out" />
+    </method>
+
+    <method name="Search">
+      <arg name="key" type="s" direction="in" />
+      <arg name="outpath" type="s" direction="in" />
+      <arg name="err" type="u" direction="out" />
+    </method>
+
+    <method name="Stat">
+      <arg name="key" type="s" direction="in" />
+      <arg name="size" type="u" direction="out" />
+      <arg name="atime" type="x" direction="out" />
+      <arg name="err" type="u" direction="out" />
+    </method>
+
+  </interface>
+</node>

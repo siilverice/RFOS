@@ -1,0 +1,5 @@
+#!/bin/bash
+
+pkill rfos-svc
+make
+./rfos-svc test1.img test2.img &
