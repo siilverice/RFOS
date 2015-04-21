@@ -190,7 +190,7 @@ static gboolean on_handle_put (
                 stat(src, &st);
                 file_size = (int) st.st_size;
 
-                if (file_size <= ((80*disk_size)/100)-seek_data && ((20*disk_size)/100)-seek_meta >= 24 )
+                if (file_size <= ((80*disk_size)/100)-seek_data )
                 {
                     //get size of disk
                     printf("%s size: %d bytes\n", disk[i],disk_size);
@@ -231,38 +231,41 @@ static gboolean on_handle_put (
                     }
                     g_string_append (str, "|");
 
-                    //read main data
-                    //FILE *fp;
-                    fp = fopen(src, "r");
-                    char ch;
-                    GString *data = g_string_new (NULL);
-                    while( ( ch = fgetc(fp) ) != EOF )
-                        g_string_append_c (data, ch);
+                    if (((20*disk_size)/100)-seek_meta >= str->len)
+                    {
+                        //read main data
+                        //FILE *fp;
+                        fp = fopen(src, "r");
+                        char ch;
+                        GString *data = g_string_new (NULL);
+                        while( ( ch = fgetc(fp) ) != EOF )
+                            g_string_append_c (data, ch);
 
-                    fclose(fp);
+                        fclose(fp);
 
-                    //write metadata
-                    fp = fopen(disk[i], "r+");
-                    fseek( fp, seek_meta, SEEK_SET );
-                    fprintf(fp, str->str);
-                    
-                    //write data
-                    fseek( fp, seek_data+start, SEEK_SET );
-                    fprintf(fp, data->str);
-                    
-                    //write " seek_meta,seekdata " to first 8 bytes
-                    fseek( fp, 0, SEEK_SET );
-                    fprintf(fp, "%d", seek_meta);
-                   
-                    fseek( fp, 15, SEEK_SET );
-                    fprintf(fp, "%d", seek_data);
+                        //write metadata
+                        fp = fopen(disk[i], "r+");
+                        fseek( fp, seek_meta, SEEK_SET );
+                        fprintf(fp, str->str);
+                        
+                        //write data
+                        fseek( fp, seek_data+start, SEEK_SET );
+                        fprintf(fp, data->str);
+                        
+                        //write " seek_meta,seekdata " to first 8 bytes
+                        fseek( fp, 0, SEEK_SET );
+                        fprintf(fp, "%d", seek_meta);
+                       
+                        fseek( fp, 15, SEEK_SET );
+                        fprintf(fp, "%d", seek_data);
 
-                    fclose(fp);
-                    
-                    printf("seek_meta = %d\nseek_data = %d\n", seek_meta,seek_data+start);
-                    printf("%s\n", str->str);
-                    printf("%s\n", data->str);
-                    err = 0;
+                        fclose(fp);
+                        
+                        printf("seek_meta = %d\nseek_data = %d\n", seek_meta,seek_data+start);
+                        printf("%s\n", str->str);
+                        printf("%s\n", data->str);
+                        err = 0;
+                    }
                 }
 
                 else
@@ -280,6 +283,263 @@ static gboolean on_handle_put (
     else if (num_disk==4)
     {
         //RAID10
+
+        //mirror 1 & 2
+        int end_set1 = 0;
+        if (end_set1 == 0)
+        {
+            stat(disk[0], &st);
+            int set1_size = (int) st.st_size;
+            stat(disk[2], &st);
+            int set2_size = (int) st.st_size;
+            if (file_size <= ((80*set1_size)/100)+((80*set2_size)/100))
+            {
+                for (i = 0; i < 2; i++)
+                {
+                    //RAID1
+                    fp = fopen(disk[i], "r+");
+                    if (fp!=NULL)
+                    {
+                        //exist
+                        fclose(fp);
+
+                        stat(disk[i], &st);
+                        disk_size = (int) st.st_size;
+                        stat(src, &st);
+                        file_size = (int) st.st_size;
+
+                        if (file_size <= ((80*disk_size)/100)-seek_data )
+                        {
+                            //get size of disk
+                            printf("%s size: %d bytes\n", disk[i],disk_size);
+                            start = (20*disk_size)/100;
+
+                            //store key and address , byte , access time
+                            g_string_assign (str, "");
+                            char conv[15];
+                            int j=0;
+                            g_string_assign (str, key);
+
+                            sprintf(conv, "%d", seek_data);
+                            while (conv[j]!='\0')
+                            {
+                                g_string_append_c (str, conv[j]);
+                                j++;
+                            }
+                            g_string_append (str, ",");
+
+                            j=0;
+                            sprintf(conv, "%d", file_size);
+
+                            while (conv[j]!='\0')
+                            {
+                                g_string_append_c (str, conv[j]);
+                                j++;
+                            }
+                            g_string_append (str, ",");
+
+                            time_t unix_time;
+                            time ( &unix_time );
+                            sprintf(conv, "%d", (int) unix_time);
+                            j=0;
+                            while (conv[j]!='\0')
+                            {
+                                g_string_append_c (str, conv[j]);
+                                j++;
+                            }
+                            g_string_append (str, "|");
+
+                            if (((20*disk_size)/100)-seek_meta >= str->len)
+                            {
+                                //read main data
+                                //FILE *fp;
+                                fp = fopen(src, "r");
+                                char ch;
+                                GString *data = g_string_new (NULL);
+                                while( ( ch = fgetc(fp) ) != EOF )
+                                    g_string_append_c (data, ch);
+
+                                fclose(fp);
+
+                                //write metadata
+                                fp = fopen(disk[i], "r+");
+                                fseek( fp, seek_meta, SEEK_SET );
+                                fprintf(fp, str->str);
+                                
+                                //write data
+                                fseek( fp, seek_data+start, SEEK_SET );
+                                fprintf(fp, data->str);
+                                
+                                //write " seek_meta,seekdata " to first 8 bytes
+                                fseek( fp, 0, SEEK_SET );
+                                fprintf(fp, "%d", seek_meta);
+                               
+                                fseek( fp, 15, SEEK_SET );
+                                fprintf(fp, "%d", seek_data);
+
+                                fclose(fp);
+                                
+                                printf("seek_meta = %d\nseek_data = %d\n", seek_meta,seek_data+start);
+                                printf("%s\n", str->str);
+                                printf("%s\n", data->str);
+                                err = 0;
+                            }
+                            else 
+                            {
+                                //not enough space
+                                end_set1 = 2;
+                                err = ENOSPC;
+                                rfos_complete_put(object, invocation, err);
+ 
+                                return TRUE;
+                            }
+                        }
+                        else
+                        {
+                            //not enough space
+                            end_set1 = 2;
+                            err = ENOSPC;
+                            rfos_complete_put(object, invocation, err);
+ 
+                            return TRUE;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                err = ENOSPC;
+                rfos_complete_put(object, invocation, err);
+ 
+                return TRUE;
+            }
+
+            seek_meta = seek_meta + str->len;
+            seek_data = seek_data + file_size;
+        }
+
+        //mirror 2 & 4
+        if (end_set1 == 1)
+        {
+            seek_meta = 0;
+            seek_data = 0;
+
+            stat(disk[0], &st);
+            int set1_size = (int) st.st_size;
+            stat(disk[2], &st);
+            int set2_size = (int) st.st_size;
+            if (file_size <= ((80*set1_size)/100)+((80*set2_size)/100))
+            {
+                for (i = 2; i < 4; i++)
+                {
+                    fp = fopen(disk[i], "r+");
+                    if (fp!=NULL)
+                    {
+                        //exist
+                        fclose(fp);
+
+                        stat(disk[i], &st);
+                        disk_size = (int) st.st_size;
+                        stat(src, &st);
+                        file_size = (int) st.st_size;
+
+                        if (file_size <= ((80*disk_size)/100)-seek_data )
+                        {
+                            //get size of disk
+                            printf("%s size: %d bytes\n", disk[i],disk_size);
+                            start = (20*disk_size)/100;
+
+                            //store key and address , byte , access time
+                            g_string_assign (str, "");
+                            char conv[15];
+                            int j=0;
+                            g_string_assign (str, key);
+
+                            sprintf(conv, "%d", seek_data);
+                            while (conv[j]!='\0')
+                            {
+                                g_string_append_c (str, conv[j]);
+                                j++;
+                            }
+                            g_string_append (str, ",");
+
+                            j=0;
+                            sprintf(conv, "%d", file_size);
+
+                            while (conv[j]!='\0')
+                            {
+                                g_string_append_c (str, conv[j]);
+                                j++;
+                            }
+                            g_string_append (str, ",");
+
+                            time_t unix_time;
+                            time ( &unix_time );
+                            sprintf(conv, "%d", (int) unix_time);
+                            j=0;
+                            while (conv[j]!='\0')
+                            {
+                                g_string_append_c (str, conv[j]);
+                                j++;
+                            }
+                            g_string_append (str, "|");
+
+                            if (((20*disk_size)/100)-seek_meta >= str->len)
+                            {
+                                //read main data
+                                //FILE *fp;
+                                fp = fopen(src, "r");
+                                char ch;
+                                GString *data = g_string_new (NULL);
+                                while( ( ch = fgetc(fp) ) != EOF )
+                                    g_string_append_c (data, ch);
+
+                                fclose(fp);
+
+                                //write metadata
+                                fp = fopen(disk[i], "r+");
+                                fseek( fp, seek_meta, SEEK_SET );
+                                fprintf(fp, str->str);
+                                
+                                //write data
+                                fseek( fp, seek_data+start, SEEK_SET );
+                                fprintf(fp, data->str);
+                                
+                                //write " seek_meta,seekdata " to first 8 bytes
+                                fseek( fp, 0, SEEK_SET );
+                                fprintf(fp, "%d", seek_meta);
+                               
+                                fseek( fp, 15, SEEK_SET );
+                                fprintf(fp, "%d", seek_data);
+
+                                fclose(fp);
+                                
+                                printf("seek_meta = %d\nseek_data = %d\n", seek_meta,seek_data+start);
+                                printf("%s\n", str->str);
+                                printf("%s\n", data->str);
+                                err = 0;
+                            }
+                            else 
+                                //not enough space , write in set2
+                                end_set1 = 1;
+                        }
+                        else
+                            //not enough space , write in set2
+                                end_set1 = 1;
+                    }
+                }
+            }
+            else
+            {
+                err = ENOSPC;
+                rfos_complete_put(object, invocation, err);
+ 
+                return TRUE;
+            }
+            seek_meta = seek_meta + str->len;
+            seek_data = seek_data + file_size;
+        }
+        
     }
 
     /** End of Put method execution, returning values **/
