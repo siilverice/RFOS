@@ -7,6 +7,8 @@
 #include <glib.h>
 #include <time.h>
 #include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 
 
 int seek_meta =  30;
@@ -21,8 +23,137 @@ static gboolean on_handle_get (
     const gchar *outpath) {
 
     /** Your Code for Get method here **/
+    guint err=0;
 
-    guint err = 0;
+    //GString *str = g_string_new (NULL);
+    int i = 0;
+    int /*file_size=0,*/disk_size=0;
+    int start;
+    struct stat st;
+    FILE *fp;
+    char local_key[9]={'\0'};
+
+
+    if (num_disk<4)
+    {
+        for (i = 0; i < num_disk; i++)
+        {
+            fp = fopen(disk[i],"r");
+            if (fp!=NULL)
+            {
+                //disk ok
+                stat(disk[i], &st);
+                disk_size = (int) st.st_size;
+                int j=0;
+                int k=0;
+                start = (20*disk_size)/100;
+                for (j = 0; ; j++)
+                {
+                    printf("%d\n", j);
+                    printf("seek = %d\n", (int)ftell(fp));
+                    
+                    if (j==0)
+                        //first set
+                        fseek( fp, 30, SEEK_SET );
+
+                    else
+                    {
+                        while(1)
+                        {
+                            if (fgetc(fp)=='|')
+                            {
+                                break;
+                            }
+                            if (ftell(fp) > (20*disk_size)/100)
+                            {
+                                err = ENOENT;
+                                break;
+                            }
+                        }
+                        if (ftell(fp) > (20*disk_size)/100)
+                        {
+                            err = ENOENT;
+                            break;
+                        }
+                    }
+
+
+                    for (k = 0; k < 8; k++)
+                    {
+                        //get key in meta data
+                        local_key[k] = fgetc(fp);
+                    }
+
+                    if (strcmp(key,local_key)==0)
+                    {
+                        //match
+                        err = 0;
+                        char tmp;
+                        FILE *dest;
+                        GString *addr = g_string_new (NULL);
+                        GString *size = g_string_new (NULL);
+                        GString *data = g_string_new (NULL);
+                        int i_addr=0;
+                        int i_size=0;
+
+                        printf("%s\n", key);
+                        printf("%s\n", local_key);
+
+                        while(1)
+                        {
+                            tmp = fgetc(fp);
+                            if (tmp ==',')
+                            {
+                                //end of address
+                                break;
+                            }
+                            g_string_append_c(addr,tmp);
+                        }
+                        i_addr = atoi(addr->str);
+
+                        while(1)
+                        {
+                            tmp = fgetc(fp);
+                            if (tmp ==',')
+                            {
+                                //end of address
+                                break;
+                            }
+                            g_string_append_c(size,tmp);
+                        }
+                        i_size = atoi(size->str);
+
+                        fseek( fp, start+i_addr, SEEK_SET );
+                        for (k = 0; k < i_size; k++)
+                        {
+                            g_string_append_c(data,fgetc(fp));
+                        }
+
+                        printf("data = %s\n", data->str);
+
+                        dest = fopen(outpath,"w+");
+                        fprintf(dest, data->str);
+                        fclose(dest);
+
+
+
+
+                        break;
+
+                    }
+                }
+
+                fclose(fp);
+                break;
+            }
+        }
+
+    }
+    else if (num_disk==4)
+    {
+        //RAID10
+    }
+
     /** End of Get method execution, returning values **/
     rfos_complete_get(object, invocation, err);
     return TRUE;
@@ -122,8 +253,7 @@ static gboolean on_handle_put (
                     //write " seek_meta,seekdata " to first 8 bytes
                     fseek( fp, 0, SEEK_SET );
                     fprintf(fp, "%d", seek_meta);
-                    
-                    //write data
+                   
                     fseek( fp, 15, SEEK_SET );
                     fprintf(fp, "%d", seek_data);
 
