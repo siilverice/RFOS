@@ -24,7 +24,7 @@ static gboolean on_handle_get (
 
     /** Your Code for Get method here **/
     guint err;
-    if (strlen(key) > 8)
+    if (strlen(key) != 8)
     {
         err = ENAMETOOLONG;
         rfos_complete_get (object, invocation, err);
@@ -40,8 +40,7 @@ static gboolean on_handle_get (
     char local_key[9]={'\0'};
 
 
-    if (num_disk<4)
-    {
+
         for (i = 0; i < num_disk; i++)
         {
             fp = fopen(disk[i],"r");
@@ -154,11 +153,6 @@ static gboolean on_handle_get (
             }
         }
 
-    }
-    else if (num_disk==4)
-    {
-        //RAID10
-    }
 
     /** End of Get method execution, returning values **/
     rfos_complete_get(object, invocation, err);
@@ -173,7 +167,7 @@ static gboolean on_handle_put (
 
     /** Your code for Put method here **/
     guint err;
-    if (strlen(key) > 8)
+    if (strlen(key) != 8)
     {
         err = ENAMETOOLONG;
         rfos_complete_put (object, invocation, err);
