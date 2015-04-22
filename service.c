@@ -23,7 +23,13 @@ static gboolean on_handle_get (
     const gchar *outpath) {
 
     /** Your Code for Get method here **/
-    guint err=0;
+    guint err;
+    if (strlen(key) > 8)
+    {
+        err = ENAMETOOLONG;
+        rfos_complete_get (object, invocation, err);
+        return TRUE;
+    }
 
     //GString *str = g_string_new (NULL);
     int i = 0;
@@ -167,6 +173,13 @@ static gboolean on_handle_put (
 
     /** Your code for Put method here **/
     guint err;
+    if (strlen(key) > 8)
+    {
+        err = ENAMETOOLONG;
+        rfos_complete_put (object, invocation, err);
+        return TRUE;
+    }
+
     GString *str = g_string_new (NULL);
     int i = 0;
     int file_size=0,disk_size=0;
@@ -560,10 +573,17 @@ static gboolean on_handle_search (
     GDBusMethodInvocation *invocation,
     const gchar *key, 
     const gchar *outpath ) 
-{   
+{
+    guint err;
+    if (strlen(key) > 8)
+    {
+        err = ENAMETOOLONG;
+        rfos_complete_search (object, invocation, err);
+        return TRUE;
+    }
+
     int i=0,j=0;
     FILE *fp;
-    guint err;
     int disk_size=0;
     struct stat st;
     int found = 0,end = 0;
@@ -602,7 +622,10 @@ static gboolean on_handle_search (
                         {
                             err = ENOENT;
                             g_tree_destroy(t);
+                            rfos_complete_search (object, invocation, err);
+                            return TRUE;
                             break;
+
                         }
                         if (ftell(fp) > (20*disk_size)/100 && found!=0)
                         {
