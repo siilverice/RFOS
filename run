@@ -2,4 +2,4 @@
 
 pkill rfos-svc
 make
-./rfos-svc test1.img test2.img test3.img test4.img &
+./rfos-svc test3.img test4.img &

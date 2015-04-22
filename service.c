@@ -548,6 +548,122 @@ static gboolean on_handle_put (
     return TRUE;
 }
 
+gboolean iter_all(gpointer key, gpointer value, gpointer data) {
+    g_string_append (data, key);
+    g_string_append_c (data, ',');
+
+    return FALSE;
+}
+
+static gboolean on_handle_search (
+    RFOS *object, 
+    GDBusMethodInvocation *invocation,
+    const gchar *key, 
+    const gchar *outpath ) 
+{   
+    int i=0,j=0;
+    FILE *fp;
+    guint err;
+    int disk_size=0;
+    struct stat st;
+    int found = 0,end = 0;
+    char local_key[9]={'\0'};
+
+    for (i = 0; i < num_disk; i++)
+    {
+        fp = fopen(disk[i],"r");
+        if (fp!=NULL)
+        {
+            printf("disk %d\n", i+1);
+            //disk ok
+            stat(disk[i], &st);
+            disk_size = (int) st.st_size;
+            int k=0;
+            GTree* t = g_tree_new((GCompareFunc)g_ascii_strcasecmp);
+
+            for (j = 0; ; j++)
+            {
+                printf("%d\n", j);
+                printf("seek = %d\n", (int)ftell(fp));
+                    
+                if (j==0)
+                    //first set
+                    fseek( fp, 30, SEEK_SET );
+
+                else
+                {
+                    while(1)
+                    {
+                        if (fgetc(fp)=='|')
+                        {
+                            break;
+                        }
+                        if (ftell(fp) > (20*disk_size)/100 && found!=1)
+                        {
+                            err = ENOENT;
+                            g_tree_destroy(t);
+                            break;
+                        }
+                        if (ftell(fp) > (20*disk_size)/100 && found!=0)
+                        {
+                            end = 1;
+                            break;
+                        }
+                    }
+                }
+
+                if (found==1 && end == 1)
+                {
+                    err = 0;
+                    FILE *dest;
+                    GString *str = g_string_new (NULL);
+                    g_tree_foreach(t, (GTraverseFunc)iter_all, str);
+
+                    dest = fopen(outpath,"w+");
+                    printf("%s\n", str->str);
+                    fwrite(str->str , 1 , str->len-1 , dest );
+                    fclose(dest);
+
+                    g_tree_destroy(t);
+                    break;
+                }
+
+
+                for (k = 0; k < 8; k++)
+                {
+                    //get key in meta data
+                    local_key[k] = fgetc(fp);
+                }
+
+                if (g_str_has_prefix(local_key, key))
+                {
+                    //match
+                    char *temp_local_key = (char *) malloc(9);
+                    int z=0;
+                    for (z = 0; z < 8; z++)
+                    {
+                        temp_local_key[z] = local_key[z];
+                    }
+                    temp_local_key[8] = '\0';
+                    g_tree_insert(t, temp_local_key , temp_local_key);
+                    printf("%s\n", local_key);
+                    //g_tree_foreach(t, (GTraverseFunc)iter_all, NULL);
+
+                    found = 1;
+
+                }
+
+            }
+
+            fclose(fp);
+            break;
+        }
+    }
+
+    rfos_complete_search (object, invocation, err);
+    return TRUE;
+}
+
 static void on_name_acquired (GDBusConnection *connection,
     const gchar *name,
     gpointer user_data)
@@ -557,6 +673,7 @@ static void on_name_acquired (GDBusConnection *connection,
     /* Bind method invocation signals with the appropriate function calls */
     g_signal_connect (skeleton, "handle-get", G_CALLBACK (on_handle_get), NULL);
     g_signal_connect (skeleton, "handle-put", G_CALLBACK (on_handle_put), NULL);
+    g_signal_connect (skeleton, "handle-search", G_CALLBACK (on_handle_search), NULL);
     /* Export the RFOS service on the connection as /kmitl/ce/os/RFOS object  */
     g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (skeleton),
         connection,
