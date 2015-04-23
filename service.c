@@ -105,7 +105,6 @@ static gboolean on_handle_get (
                         FILE *dest;
                         GString *addr = g_string_new (NULL);
                         GString *size = g_string_new (NULL);
-                        GString *data = g_string_new (NULL);
                         int i_addr=0;
                         int i_size=0;
 
@@ -136,20 +135,16 @@ static gboolean on_handle_get (
                         }
                         i_size = atoi(size->str);
 
+                        char temp_out;
                         fseek( fp, start+i_addr, SEEK_SET );
+                        dest = fopen(outpath,"wb");
                         for (k = 0; k < i_size; k++)
                         {
-                            g_string_append_c(data,fgetc(fp));
+                            temp_out = fgetc(fp);
+                            fwrite(&temp_out , 1 , 1 , dest );
                         }
 
-                        printf("data = %s\n", data->str);
-
-                        dest = fopen(outpath,"w+");
-                        fprintf(dest, data->str);
                         fclose(dest);
-
-
-
 
                         break;
 
