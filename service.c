@@ -46,12 +46,13 @@ static gboolean on_handle_get (
     struct stat st;
     FILE *fp;
     char local_key[9]={'\0'};
+    int match = 0;
 
 
 
         for (i = 0; i < num_disk; i++)
         {
-            fp = fopen(disk[i],"r");
+            fp = fopen(disk[i],"r+");
             if (fp!=NULL)
             {
                 //disk ok
@@ -135,26 +136,35 @@ static gboolean on_handle_get (
                         }
                         i_size = atoi(size->str);
 
-                        char temp_out;
-                        fseek( fp, start+i_addr, SEEK_SET );
-                        dest = fopen(outpath,"wb");
-                        for (k = 0; k < i_size; k++)
-                        {
-                            temp_out = fgetc(fp);
-                            fwrite(&temp_out , 1 , 1 , dest );
-                        }
+                        time_t unix_time;
+                        time ( &unix_time );
+                        fprintf(fp, "%d", (int) unix_time );
+                        printf("change time = %d\n", (int)unix_time);
 
-                        fclose(dest);
+                        if (match == 0)
+                        {
+                            char temp_out;
+                            fseek( fp, start+i_addr, SEEK_SET );
+                            dest = fopen(outpath,"wb");
+                            for (k = 0; k < i_size; k++)
+                            {
+                                temp_out = fgetc(fp);
+                                fwrite(&temp_out , 1 , 1 , dest );
+                            }
+
+                            fclose(dest);
+
+                            match = 1;
+                        }
 
                         break;
 
                     }
                 }
-
-                fclose(fp);
-                break;
             }
         }
+
+        fclose(fp);
 
 
     /** End of Get method execution, returning values **/
