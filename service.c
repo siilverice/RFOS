@@ -11,10 +11,18 @@
 #include <stdlib.h>
 
 
+
+
+//To do: update access time
+
+
+
 int seek_meta =  30;
 int seek_data =  0;
 int num_disk = 0;
 char* disk[4] = {NULL};
+int end_set1 = 0;
+
 
 static gboolean on_handle_get (
     RFOS *object,
@@ -180,6 +188,10 @@ static gboolean on_handle_put (
     int start;
     struct stat st;
     FILE *fp;
+    
+
+    stat(src, &st);
+    file_size = (int) st.st_size;
 
     if (num_disk<4)
     {
@@ -194,8 +206,7 @@ static gboolean on_handle_put (
 
                 stat(disk[i], &st);
                 disk_size = (int) st.st_size;
-                stat(src, &st);
-                file_size = (int) st.st_size;
+                
 
                 if (file_size <= ((80*disk_size)/100)-seek_data )
                 {
@@ -287,12 +298,15 @@ static gboolean on_handle_put (
         seek_data = seek_data + file_size;
 
     }
+
     else if (num_disk==4)
     {
         //RAID10
+        printf("RAID10\n");
+        printf("%d\n", file_size);
 
         //mirror 1 & 2
-        int end_set1 = 0;
+        
         if (end_set1 == 0)
         {
             stat(disk[0], &st);
@@ -315,8 +329,14 @@ static gboolean on_handle_put (
                         stat(src, &st);
                         file_size = (int) st.st_size;
 
+                        printf("in set 1\n");
+
                         if (file_size <= ((80*disk_size)/100)-seek_data )
                         {
+                            printf("     seek_data      %d\n", seek_data);
+                            printf("     80per      %d\n", ((80*disk_size)/100));
+                            printf("start %d\n",start);
+
                             //get size of disk
                             printf("%s size: %d bytes\n", disk[i],disk_size);
                             start = (20*disk_size)/100;
@@ -379,36 +399,42 @@ static gboolean on_handle_put (
                                 
                                 //write " seek_meta,seekdata " to first 8 bytes
                                 fseek( fp, 0, SEEK_SET );
-                                fprintf(fp, "%d", seek_meta);
+                                fprintf(fp, "%d", seek_meta + (int)str->len);
                                
                                 fseek( fp, 15, SEEK_SET );
-                                fprintf(fp, "%d", seek_data);
+                                fprintf(fp, "%d", seek_data+file_size);
 
                                 fclose(fp);
                                 
                                 printf("seek_meta = %d\nseek_data = %d\n", seek_meta,seek_data+start);
                                 printf("%s\n", str->str);
-                                printf("%s\n", data->str);
+                                //printf("%s\n", data->str);
                                 err = 0;
                             }
                             else 
                             {
                                 //not enough space
-                                end_set1 = 2;
-                                err = ENOSPC;
+                                end_set1 = 1;
+                                seek_meta = 30;
+                                seek_data = 0;
+                                break;
+                                /*err = ENOSPC;
                                 rfos_complete_put(object, invocation, err);
  
-                                return TRUE;
+                                return TRUE;*/
                             }
                         }
                         else
                         {
                             //not enough space
-                            end_set1 = 2;
-                            err = ENOSPC;
+                            end_set1 = 1;
+                            seek_meta = 30;
+                            seek_data = 0;
+                            break;
+                            /*err = ENOSPC;
                             rfos_complete_put(object, invocation, err);
  
-                            return TRUE;
+                            return TRUE;*/
                         }
                     }
                 }
@@ -421,15 +447,21 @@ static gboolean on_handle_put (
                 return TRUE;
             }
 
-            seek_meta = seek_meta + str->len;
-            seek_data = seek_data + file_size;
+            if (end_set1==0)
+            {
+                seek_meta = seek_meta + str->len;
+                seek_data = seek_data + file_size;
+            }
         }
 
         //mirror 2 & 4
         if (end_set1 == 1)
         {
-            seek_meta = 0;
-            seek_data = 0;
+            /*seek_meta = 0;
+            seek_data = 0;*/
+            err=0;
+            printf("Start set 2\n");
+
 
             stat(disk[0], &st);
             int set1_size = (int) st.st_size;
@@ -450,6 +482,8 @@ static gboolean on_handle_put (
                         stat(src, &st);
                         file_size = (int) st.st_size;
 
+                        printf("in set 2\n");
+
                         if (file_size <= ((80*disk_size)/100)-seek_data )
                         {
                             //get size of disk
@@ -514,30 +548,45 @@ static gboolean on_handle_put (
                                 
                                 //write " seek_meta,seekdata " to first 8 bytes
                                 fseek( fp, 0, SEEK_SET );
-                                fprintf(fp, "%d", seek_meta);
+                                fprintf(fp, "%d", seek_meta + (int)str->len);
                                
                                 fseek( fp, 15, SEEK_SET );
-                                fprintf(fp, "%d", seek_data);
+                                fprintf(fp, "%d", seek_data+file_size);
 
                                 fclose(fp);
                                 
                                 printf("seek_meta = %d\nseek_data = %d\n", seek_meta,seek_data+start);
                                 printf("%s\n", str->str);
-                                printf("%s\n", data->str);
+                                //printf("%s\n", data->str);
                                 err = 0;
                             }
                             else 
-                                //not enough space , write in set2
-                                end_set1 = 1;
+                            {
+                                //not enough space
+                                printf("else 1\n");
+                                end_set1 = 2;
+                                err = ENOSPC;
+                                rfos_complete_put(object, invocation, err);
+ 
+                                return TRUE;
+                            }
                         }
                         else
-                            //not enough space , write in set2
-                                end_set1 = 1;
+                        {
+                            //not enough space
+                            printf("else 2\n");
+                            end_set1 = 2;
+                            err = ENOSPC;
+                            rfos_complete_put(object, invocation, err);
+ 
+                            return TRUE;
+                        }
                     }
                 }
             }
             else
             {
+                printf("else else\n");
                 err = ENOSPC;
                 rfos_complete_put(object, invocation, err);
  
@@ -548,6 +597,8 @@ static gboolean on_handle_put (
         }
         
     }
+
+    printf("%d\n", err);
 
     /** End of Put method execution, returning values **/
     rfos_complete_put(object, invocation, err);

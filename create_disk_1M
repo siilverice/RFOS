@@ -1,0 +1,10 @@
+#!/bin/bash
+
+rm test1.img
+rm test2.img
+rm test3.img
+rm test4.img
+dd if=/dev/zero of=test1.img bs=1M count=1
+dd if=/dev/zero of=test2.img bs=1M count=1
+dd if=/dev/zero of=test3.img bs=1M count=1
+dd if=/dev/zero of=test4.img bs=1M count=1
