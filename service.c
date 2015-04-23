@@ -737,6 +737,135 @@ static gboolean on_handle_search (
     return TRUE;
 }
 
+static gboolean on_handle_stat (
+    RFOS *object, 
+    GDBusMethodInvocation *invocation,
+    const gchar *key ) 
+{
+    guint err;
+    guint size = 0;
+    gint64 atime = 0;
+    if (strlen(key) != 8)
+    {
+        err = ENAMETOOLONG;
+        rfos_complete_stat (object, invocation, size, atime, err);
+        return TRUE;
+    }
+
+    int i = 0;
+    int disk_size=0;
+    struct stat st;
+    FILE *fp;
+    char local_key[9]={'\0'};
+
+
+
+        for (i = 0; i < num_disk; i++)
+        {
+            fp = fopen(disk[i],"r");
+            if (fp!=NULL)
+            {
+                //disk ok
+                stat(disk[i], &st);
+                disk_size = (int) st.st_size;
+                int j=0;
+                int k=0;
+                for (j = 0; ; j++)
+                {
+                    
+                    if (j==0)
+                        //first set
+                        fseek( fp, 30, SEEK_SET );
+
+                    else
+                    {
+                        while(1)
+                        {
+                            if (fgetc(fp)=='|')
+                            {
+                                break;
+                            }
+                            if (ftell(fp) > (20*disk_size)/100)
+                            {
+                                err = ENOENT;
+                                break;
+                            }
+                        }
+                        if (ftell(fp) > (20*disk_size)/100)
+                        {
+                            err = ENOENT;
+                            break;
+                        }
+                    }
+
+
+                    for (k = 0; k < 8; k++)
+                    {
+                        //get key in meta data
+                        local_key[k] = fgetc(fp);
+                    }
+
+                    if (strcmp(key,local_key)==0)
+                    {
+                        //match
+                        err = 0;
+                        char tmp;
+                        GString *size = g_string_new (NULL);
+                        GString *atime = g_string_new (NULL);
+                        guint i_size=0;
+                        guint i_atime=0;
+
+                        while(1)
+                        {
+                            tmp = fgetc(fp);
+                            if (tmp ==',')
+                            {
+                                //end of address
+                                break;
+                            }
+                        }
+
+                        while(1)
+                        {
+                            tmp = fgetc(fp);
+                            if (tmp ==',')
+                            {
+                                //end of address
+                                break;
+                            }
+                            g_string_append_c(size,tmp);
+                        }
+                        i_size = atoi(size->str);
+
+                        while(1)
+                        {
+                            tmp = fgetc(fp);
+                            if (tmp =='|')
+                            {
+                                //end of address
+                                break;
+                            }
+                            g_string_append_c(atime,tmp);
+                        }
+                        i_atime = atoi(atime->str);
+
+
+                        rfos_complete_stat (object, invocation, i_size, i_atime, err);
+                        return TRUE;
+
+                        break;
+
+                    }
+                }
+            }
+        }
+
+        fclose(fp);
+
+    rfos_complete_stat (object, invocation, size, atime, err);
+    return TRUE;
+}
+
 static void on_name_acquired (GDBusConnection *connection,
     const gchar *name,
     gpointer user_data)
@@ -747,6 +876,7 @@ static void on_name_acquired (GDBusConnection *connection,
     g_signal_connect (skeleton, "handle-get", G_CALLBACK (on_handle_get), NULL);
     g_signal_connect (skeleton, "handle-put", G_CALLBACK (on_handle_put), NULL);
     g_signal_connect (skeleton, "handle-search", G_CALLBACK (on_handle_search), NULL);
+    g_signal_connect (skeleton, "handle-stat", G_CALLBACK (on_handle_stat), NULL);
     /* Export the RFOS service on the connection as /kmitl/ce/os/RFOS object  */
     g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (skeleton),
         connection,
