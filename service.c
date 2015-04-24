@@ -23,6 +23,84 @@ int num_disk = 0;
 char* disk[4] = {NULL};
 int end_set1 = 0;
 
+void check_old_seek (int mode)
+{
+    printf("Yeahhhhh\n");
+
+    int i=0;
+
+    if (mode == 2)
+    {
+        //start set2 RAID10
+        i = 2;
+    }
+
+    GString *old_meta = g_string_new(NULL);
+    GString *old_data = g_string_new(NULL);
+    FILE *fp;
+    for (i = 0; i < num_disk; i++)
+    {
+        fp = fopen(disk[i],"r");
+        if (fp != NULL)
+        {
+            char tmp;
+            while(1)
+            {               
+                tmp = fgetc(fp);
+                if (ftell(fp) > 30)
+                {
+                    break;
+                }
+
+                if (tmp == ',')
+                {
+                    char tmp1;
+                    fseek( fp, 0, SEEK_SET );
+                    while (1)
+                    {
+                        tmp1 = fgetc(fp);
+                        if (tmp1 == ',')
+                        {
+                            break;
+                        }
+                        else
+                            g_string_append_c(old_meta,tmp1);
+
+                    }
+
+                    fseek( fp, 15, SEEK_SET );
+                    while (1)
+                    {
+                        tmp1 = fgetc(fp);
+                        if (tmp1 == ',')
+                        {
+                            break;
+                        }
+                        else
+                            g_string_append_c(old_data,tmp1);
+
+                    }
+                    break;
+                } 
+
+            }
+           
+            fclose(fp);
+
+            if (old_meta != NULL && old_data != NULL)
+            {
+                seek_meta = atoi(old_meta->str);
+                seek_data = atoi(old_data->str);
+                printf("old_meta = %d\n", seek_meta);
+                printf("old_data = %d\n", seek_data);
+            }
+
+            break;
+        }
+        else
+            printf("else\n");
+    }
+}
 
 static gboolean on_handle_get (
     RFOS *object,
@@ -277,10 +355,12 @@ static gboolean on_handle_put (
                         
                         //write " seek_meta,seekdata " to first 8 bytes
                         fseek( fp, 0, SEEK_SET );
-                        fprintf(fp, "%d", seek_meta);
-                       
+                        fprintf(fp, "%d", seek_meta + (int)str->len);
+                        fprintf(fp, "," );
+                               
                         fseek( fp, 15, SEEK_SET );
-                        fprintf(fp, "%d", seek_data);
+                        fprintf(fp, "%d", seek_data+file_size);
+                        fprintf(fp, "," );
 
                         fclose(fp);
                         
@@ -405,9 +485,11 @@ static gboolean on_handle_put (
                                 //write " seek_meta,seekdata " to first 8 bytes
                                 fseek( fp, 0, SEEK_SET );
                                 fprintf(fp, "%d", seek_meta + (int)str->len);
+                                fprintf(fp, "," );
                                
                                 fseek( fp, 15, SEEK_SET );
                                 fprintf(fp, "%d", seek_data+file_size);
+                                fprintf(fp, "," );
 
                                 fclose(fp);
                                 
@@ -905,10 +987,66 @@ int main (int arc, char *argv[])
     printf("%d\n", num_disk);
     
     //add name disk
+    /*GString *old_meta = g_string_new("NO");
+    GString *old_data = g_string_new("NO");
+    FILE *fp;*/
     for (i = 0; i < num_disk; i++)
     {
         disk[i] = argv[i+1];
+
+        /*fp = fopen(disk[i],"r");
+        if (fp != NULL)
+        {
+            char tmp;
+            while(1)
+            {               
+                tmp = fgetc(fp);
+                if (ftell(fp) > 30)
+                {
+                    break;
+                }
+
+                if (tmp == ',')
+                {
+                    char tmp1;
+                    fseek( fp, 0, SEEK_SET );
+                    while (1)
+                    {
+                        tmp1 = fgetc(fp);
+                        if (tmp1 == ',')
+                        {
+                            break;
+                        }
+                        else
+                            g_string_append_c(old_meta,tmp1);
+
+                    }
+
+                    fseek( fp, 15, SEEK_SET );
+                    while (1)
+                    {
+                        tmp1 = fgetc(fp);
+                        if (tmp1 == ',')
+                        {
+                            break;
+                        }
+                        else
+                            g_string_append_c(old_data,tmp1);
+
+                    }
+                    break;
+                } 
+
+            }
+
+            fclose(fp);
+
+            printf("old_meta = %s\n", old_meta->str);
+            printf("old_data = %s\n", old_data->str);
+        }*/
     }
+
+    check_old_seek(1);
 
     //left
     for ( ; i < 4; i++)
@@ -919,6 +1057,7 @@ int main (int arc, char *argv[])
     printf("disk2 = %s\n", disk[1]);
     printf("disk3 = %s\n", disk[2]);
     printf("disk4 = %s\n", disk[3]);
+
 
     g_main_loop_run (loop);
     return 0;
