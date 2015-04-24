@@ -23,6 +23,9 @@ int num_disk = 0;
 char* disk[4] = {NULL};
 int end_set1 = 0;
 
+int free_space_remove = 0;
+int full_meta = 0;
+
 void check_old_seek (int mode)
 {
     printf("check_old_seek\n");
@@ -263,6 +266,136 @@ static gboolean on_handle_get (
     return TRUE;
 }
 
+int use_removed_space(int i, int size_file, const gchar *src, const gchar *key, int disk_size)
+{
+    //find '-'
+    printf("!!!!!!!IN HEAR!!!!!!!!!!!\n");
+    int start = (20*disk_size)/100;
+    printf("start = %d\n", start);
+    char tmp;
+    FILE *fp;
+    int meta=0;
+    fp = fopen(disk[i],"r+");
+    fseek( fp, 30, SEEK_SET );
+    while(1)
+    {
+        tmp = fgetc(fp);
+        if (tmp == '-')
+        {
+            printf("still have free space!!!\n" );
+            //still have free space!!!
+            //--------738861,13,1429868791|
+            GString *addr = g_string_new (NULL);
+            GString *size = g_string_new (NULL);
+            int i_addr=0;
+            int i_size=0;
+
+            fseek( fp, -1, SEEK_CUR );
+            meta = ftell(fp);
+            printf("meta = %d\n", meta);
+            fseek( fp, 7, SEEK_CUR );
+
+            while(1)
+            {
+                tmp = fgetc(fp);
+                if (tmp == ',')
+                {
+                    break;
+                }
+                g_string_append_c(addr,tmp);
+            }
+            i_addr = atoi(addr->str);
+
+            while(1)
+            {
+                tmp = fgetc(fp);
+                if (tmp == ',')
+                {
+                    break;
+                }
+                g_string_append_c(size,tmp);
+            }
+            i_size = atoi(size->str);
+            free_space_remove = i_size;
+
+            if (size_file <= i_size)
+            {
+                //OK!
+                GString *str = g_string_new(NULL);
+                char conv[15];
+                int j=0;
+                g_string_assign (str, key);
+
+                sprintf(conv, "%d", i_addr);
+                while (conv[j]!='\0')
+                {
+                    g_string_append_c (str, conv[j]);
+                    j++;
+                }
+                g_string_append (str, ",");
+
+                j=0;
+                sprintf(conv, "%d", size_file);
+                while (conv[j]!='\0')
+                {
+                    g_string_append_c (str, conv[j]);
+                    j++;
+                }
+                g_string_append (str, ",");
+
+                time_t unix_time;
+                time ( &unix_time );
+                sprintf(conv, "%d", (int) unix_time);
+                j=0;
+                while (conv[j]!='\0')
+                {
+                    g_string_append_c (str, conv[j]);
+                    j++;
+                }
+                g_string_append (str, "|");
+
+                fseek(fp,meta,SEEK_SET);
+                fprintf(fp, str->str );
+
+                printf("free_space_remove - size_file = %d\n", free_space_remove - size_file);
+                if (free_space_remove - size_file > 0 )
+                {
+                    printf("in in in\n");
+                    fseek(fp, seek_meta, SEEK_SET);
+                    fprintf(fp, "-");
+                    fprintf(fp, "%d", free_space_remove - size_file);
+                }
+
+                FILE *data_file;
+                data_file = fopen(src, "r");
+                char ch;
+                GString *data = g_string_new (NULL);
+                while( ( ch = fgetc(fp) ) != EOF )
+                    g_string_append_c (data, ch);
+
+                fclose(data_file);
+
+                fseek( fp, i_addr+start, SEEK_SET );
+                fprintf(fp, data->str);
+
+
+                fclose(fp);
+                return 1;
+                break;
+            }
+        }
+
+        if (ftell(fp) > start)
+        {
+            printf("no free space\n");
+            printf("ftell = %d\n", (int)ftell(fp));
+            //no free space
+            fclose(fp);
+            return 0;
+        }
+    }
+}
+
 static gboolean on_handle_put (
     RFOS *object,
     GDBusMethodInvocation *invocation,
@@ -389,7 +522,8 @@ static gboolean on_handle_put (
                 else
                 {
                     //not enough space
-                    err = ENOSPC;
+                    if (!use_removed_space(i, file_size, src, key, disk_size))
+                        err = ENOSPC;
                 }
             }
             printf("\n");
@@ -517,19 +651,25 @@ static gboolean on_handle_put (
                             else 
                             {
                                 //not enough space
-                                end_set1 = 1;
-                                seek_meta = 30;
-                                seek_data = 0;
-                                break;
+                                if (!use_removed_space(i, file_size, src, key, disk_size))
+                                {
+                                    end_set1 = 1;
+                                    seek_meta = 30;
+                                    seek_data = 0;
+                                    break;
+                                }
                             }
                         }
                         else
                         {
                             //not enough space
-                            end_set1 = 1;
-                            seek_meta = 30;
-                            seek_data = 0;
-                            break;
+                            if (!use_removed_space(i, file_size, src, key, disk_size))
+                            {
+                                end_set1 = 1;
+                                seek_meta = 30;
+                                seek_data = 0;
+                                break;
+                            }
                         }
                     }
                 }
@@ -661,24 +801,28 @@ static gboolean on_handle_put (
                             {
                                 //not enough space
                                 printf("else 1\n");
-                                err = ENOSPC;
-                                end_set1=0;
-                                rfos_complete_put(object, invocation, err);
- 
-                                return TRUE;
+                                if (!use_removed_space(1, file_size, src, key, disk_size))
+                                {
+                                    err = ENOSPC;
+                                    end_set1=0;
+                                    rfos_complete_put(object, invocation, err);
+     
+                                    return TRUE;
+                                }
                             }
                         }
                         else
                         {
                             //not enough space
                             printf("else 2\n");
-                            printf("%d\n", seek_meta);
-                            printf("%d\n", seek_data);
-                            err = ENOSPC;
-                            end_set1=0;
-                            rfos_complete_put(object, invocation, err);
- 
-                            return TRUE;
+                            if (!use_removed_space(1, file_size, src, key, disk_size))
+                            {
+                                err = ENOSPC;
+                                end_set1=0;
+                                rfos_complete_put(object, invocation, err);
+     
+                                return TRUE;
+                            }
                         }
                     }
                 }
@@ -962,6 +1106,121 @@ static gboolean on_handle_stat (
     return TRUE;
 }
 
+static gboolean on_handle_remove (
+    RFOS *object, 
+    GDBusMethodInvocation *invocation,
+    const gchar *key )
+{
+    guint err = 0;
+
+    //-size----------------
+    //if size of file < free size => append end of meta
+    if (strlen(key) != 8)
+    {
+        err = ENAMETOOLONG;
+        rfos_complete_remove (object, invocation, err);
+        return TRUE;
+    }
+
+    int i = 0;
+    int disk_size=0;
+    struct stat st;
+    FILE *fp;
+    char local_key[9]={'\0'};
+
+
+
+        for (i = 0; i < num_disk; i++)
+        {
+            fp = fopen(disk[i],"r+");
+            if (fp!=NULL)
+            {
+                //disk ok
+                stat(disk[i], &st);
+                disk_size = (int) st.st_size;
+                int j=0;
+                int k=0;
+                for (j = 0; ; j++)
+                {
+                    
+                    if (j==0)
+                        //first set
+                        fseek( fp, 30, SEEK_SET );
+
+                    else
+                    {
+                        while(1)
+                        {
+                            if (fgetc(fp)=='|')
+                            {
+                                break;
+                            }
+                            if (ftell(fp) > (20*disk_size)/100)
+                            {
+                                err = ENOENT;
+                                break;
+                            }
+                        }
+                        if (ftell(fp) > (20*disk_size)/100)
+                        {
+                            err = ENOENT;
+                            break;
+                        }
+                    }
+
+
+                    for (k = 0; k < 8; k++)
+                    {
+                        //get key in meta data
+                        local_key[k] = fgetc(fp);
+                    }
+
+                    //0000000A0,738861,1429868783|
+                    if (strcmp(key,local_key)==0)
+                    {
+                        err = 0;
+                        char tmp;
+
+                        fseek( fp, -8, SEEK_CUR );
+                        for (k = 0; k < 8; k++)
+                        {
+                            fwrite("-",1,1,fp);
+                        }
+
+                        while(1)
+                        {
+                            tmp = fgetc(fp);
+                            if (tmp ==',')
+                            {
+                                //end of addr
+                                break;
+                            }
+                        }
+
+                        while(1)
+                        {
+                            tmp = fgetc(fp);
+                            if (tmp ==',')
+                            {
+                                //end of size
+                                break;
+                            }
+                        }
+
+                        break;
+
+                    }
+                }
+            }
+        }
+
+        fclose(fp);
+
+
+    rfos_complete_remove (object, invocation, err);
+    return TRUE;
+}
+
 static void on_name_acquired (GDBusConnection *connection,
     const gchar *name,
     gpointer user_data)
@@ -973,6 +1232,7 @@ static void on_name_acquired (GDBusConnection *connection,
     g_signal_connect (skeleton, "handle-put", G_CALLBACK (on_handle_put), NULL);
     g_signal_connect (skeleton, "handle-search", G_CALLBACK (on_handle_search), NULL);
     g_signal_connect (skeleton, "handle-stat", G_CALLBACK (on_handle_stat), NULL);
+    g_signal_connect (skeleton, "handle-remove", G_CALLBACK (on_handle_remove), NULL);
     /* Export the RFOS service on the connection as /kmitl/ce/os/RFOS object  */
     g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (skeleton),
         connection,
