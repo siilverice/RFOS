@@ -275,6 +275,16 @@ int use_removed_space(int i, int size_file, const gchar *src, const gchar *key, 
     char tmp;
     FILE *fp;
     int meta=0;
+    int i_free_spc=0;
+
+    fp = fopen(src, "r");
+    char ch;
+    GString *data = g_string_new (NULL);
+    while( ( ch = fgetc(fp) ) != EOF )
+        g_string_append_c (data, ch);
+
+    fclose(fp);
+
     fp = fopen(disk[i],"r+");
     fseek( fp, 30, SEEK_SET );
     while(1)
@@ -293,7 +303,7 @@ int use_removed_space(int i, int size_file, const gchar *src, const gchar *key, 
             fseek( fp, -1, SEEK_CUR );
             meta = ftell(fp);
             printf("meta = %d\n", meta);
-            fseek( fp, 7, SEEK_CUR );
+            fseek( fp, 8, SEEK_CUR );
 
             while(1)
             {
@@ -305,6 +315,7 @@ int use_removed_space(int i, int size_file, const gchar *src, const gchar *key, 
                 g_string_append_c(addr,tmp);
             }
             i_addr = atoi(addr->str);
+            printf("addr = %d\n", i_addr);
 
             while(1)
             {
@@ -317,9 +328,111 @@ int use_removed_space(int i, int size_file, const gchar *src, const gchar *key, 
             }
             i_size = atoi(size->str);
             free_space_remove = i_size;
-
-            if (size_file <= i_size)
+            printf("size = %d\n", i_size);
+            printf("free %d\n", free_space_remove);
+            if (free_space_remove < size_file)
             {
+                printf("find !\n");
+                GString *free_spc = g_string_new(NULL);
+                char abc;
+                fseek(fp,30,SEEK_SET);
+                while(1)
+                {
+                    //printf("%d\n", ftell(fp));
+                    if (fgetc(fp) == '!')
+                    {
+                        printf("found~~~~~~~~~~~~~~~~~~~~\n");
+                        while(1)
+                        {
+                            abc = fgetc(fp);
+                            printf("%c\n", abc);
+                            if (abc == ',')
+                            {
+                                break;
+                            }
+                            g_string_append_c(free_spc ,abc);
+                        }
+                        printf("%s\n", free_spc->str);
+                        i_free_spc = atoi(free_spc->str);
+                        printf("i_free_spc = %d\n", i_free_spc);
+                        if ( i_free_spc + free_space_remove - size_file > 0 )
+                        {
+                            char conv[15];
+                            int j=0;
+                            GString *new_meta = g_string_new(NULL);
+                            sprintf(conv, "%d", i_free_spc + free_space_remove - size_file);
+
+                            while (conv[j]!='\0')
+                            {
+                                g_string_append_c (new_meta, conv[j]);
+                                j++;
+                            }
+                            g_string_append (new_meta, ",");
+
+                            j=0;
+                            sprintf(conv, "%d", i_addr+(int)data->len);
+
+                            while (conv[j]!='\0')
+                            {
+                                g_string_append_c (new_meta, conv[j]);
+                                j++;
+                            }
+                            g_string_append (new_meta, ",");
+
+
+                            printf("i_free_spc = %d\n", i_free_spc);
+                            printf("free_space_remove = %d\n", free_space_remove);
+                            printf("size_file = %d\n", size_file);
+                            printf("result = %d\n", i_free_spc + free_space_remove - size_file);
+                            fseek(fp,-(free_spc->len+1),SEEK_CUR);
+                            /*fprintf(fp, "%d", i_free_spc + free_space_remove - size_file);
+                            fwrite(",",1,1,fp);
+                            fprintf(fp, "%d", i_addr+(int)data->len);
+                            fwrite(",",1,1,fp);*/
+                            printf("len is %d\n", (int)new_meta->len);
+                            fprintf(fp, new_meta->str );
+                            if (i == 1 || 3)
+                            {
+                                seek_meta = seek_meta + (int)new_meta->len;
+                            }
+
+                            fseek(fp,0,SEEK_SET);
+                            fprintf(fp, "%d", seek_meta + (int)new_meta->len);
+
+                        }
+                        else
+                        {
+                            int k=0;
+                            fseek(fp,-(free_spc->len+2),SEEK_CUR);
+                            for (k = 0; k < free_spc->len+2; k++)
+                            {
+                                fwrite(".",1,1,fp);
+                            }
+                        }
+
+                        break;
+                    }
+
+                    if ( ftell(fp) > (20*disk_size)/100 )
+                    {
+                        printf("over\n");
+                        return 0;
+                    }
+                }
+
+                if (i_free_spc + free_space_remove < size_file)
+                {
+                    printf("%d\n", i_free_spc + free_space_remove);
+                    printf("%d\n", size_file);
+                    printf("not engt\n");
+                    return 0;
+                }
+
+            }
+
+            if (size_file <= i_size || i_free_spc!=0)
+            {
+                printf("OK!\n");
                 //OK!
                 GString *str = g_string_new(NULL);
                 char conv[15];
@@ -361,19 +474,52 @@ int use_removed_space(int i, int size_file, const gchar *src, const gchar *key, 
                 if (free_space_remove - size_file > 0 )
                 {
                     printf("in in in\n");
+                    printf("seekkkkkkkkk metaaaaaaaaaaaaaaaaaaaaaaaaaa = %d\n", seek_meta);
                     fseek(fp, seek_meta, SEEK_SET);
-                    fprintf(fp, "-");
+                    /*fprintf(fp, "!");
                     fprintf(fp, "%d", free_space_remove - size_file);
+                    fwrite(",",1,1,fp);
+                    fprintf(fp, "%d", i_addr+(int)data->len);
+                    fwrite(",",1,1,fp);*/
+
+                    char conv[15];
+                    int j=0;
+                    GString *new_meta = g_string_new("!");
+                    sprintf(conv, "%d", i_free_spc + free_space_remove - size_file);
+
+                    while (conv[j]!='\0')
+                    {
+                        g_string_append_c (new_meta, conv[j]);
+                        j++;
+                    }
+                    g_string_append (new_meta, ",");
+
+                    j=0;
+                    sprintf(conv, "%d", i_addr+(int)data->len);
+
+                    while (conv[j]!='\0')
+                    {
+                        g_string_append_c (new_meta, conv[j]);
+                        j++;
+                    }
+                    g_string_append (new_meta, ",");
+
+                    fprintf(fp, new_meta->str );
+                    if (i == 1 || i == 3)
+                    {
+                        seek_meta = seek_meta + (int)new_meta->len;
+                        fseek(fp,0,SEEK_SET);
+                        fprintf(fp, "%d", seek_meta);
+                    }
+
+                    if (i == 0 || i == 2)
+                    {
+                        fseek(fp,0,SEEK_SET);
+                        fprintf(fp, "%d", seek_meta + (int)new_meta->len);
+                    }
                 }
 
-                FILE *data_file;
-                data_file = fopen(src, "r");
-                char ch;
-                GString *data = g_string_new (NULL);
-                while( ( ch = fgetc(fp) ) != EOF )
-                    g_string_append_c (data, ch);
-
-                fclose(data_file);
+                
 
                 fseek( fp, i_addr+start, SEEK_SET );
                 fprintf(fp, data->str);
@@ -383,7 +529,156 @@ int use_removed_space(int i, int size_file, const gchar *src, const gchar *key, 
                 return 1;
                 break;
             }
+
         }
+
+        if (tmp == '!')
+        {
+            printf("find !\n");
+            GString *free_spc = g_string_new(NULL);
+            GString *free_addr = g_string_new(NULL);
+            int i_free_spc=0;
+            int i_free_addr=0;
+            char abc;
+            fseek(fp,-1,SEEK_CUR);
+            int meta = ftell(fp);
+            fseek(fp,1,SEEK_CUR);
+            while(1)
+            {                
+                abc = fgetc(fp);
+                //printf("%c\n", abc);
+                if (abc == ',')
+                {
+                    //free space in holeeeeeeeeee
+                    break;
+                }
+                g_string_append_c(free_spc ,abc);   
+            }
+            i_free_spc = atoi(free_spc->str);
+
+            while(1)
+            {                
+                abc = fgetc(fp);
+                //printf("%c\n", abc);
+                if (abc == ',')
+                {
+                    //free addr in holeeeeeeeeee
+                    break;
+                }
+                g_string_append_c(free_addr ,abc);
+            }
+            i_free_addr = atoi(free_addr->str);
+
+            printf("i_free_spc = %d\n", i_free_spc);
+            printf("i_free_addr = %d\n", i_free_addr);
+            if (i_free_spc >= size_file)
+            {
+                //OK!
+                GString *str = g_string_new(NULL);
+                char conv[15];
+                int j=0;
+                g_string_assign (str, key);
+
+                sprintf(conv, "%d", i_free_addr);
+                while (conv[j]!='\0')
+                {
+                    g_string_append_c (str, conv[j]);
+                    j++;
+                }
+                g_string_append (str, ",");
+
+                j=0;
+                sprintf(conv, "%d", size_file);
+                while (conv[j]!='\0')
+                {
+                    g_string_append_c (str, conv[j]);
+                    j++;
+                }
+                g_string_append (str, ",");
+
+                time_t unix_time;
+                time ( &unix_time );
+                sprintf(conv, "%d", (int) unix_time);
+                j=0;
+                while (conv[j]!='\0')
+                {
+                    g_string_append_c (str, conv[j]);
+                    j++;
+                }
+                g_string_append (str, "|");
+
+                printf("meta = %d\n", meta);
+                printf("meta data = %s\n", str->str);
+                fseek(fp,meta,SEEK_SET);
+                fprintf(fp, str->str );
+                fseek(fp,i_free_addr+start,SEEK_SET);
+                fprintf(fp, data->str );
+
+                printf("i_free_spc - size_file = %d\n", i_free_spc - size_file);
+                if (i_free_spc - size_file > 0 )
+                {
+                    printf("in in in\n");
+                    printf("seekkkkkkkkk metaaaaaaaaaaaaaaaaaaaaaaaaaa = %d\n", meta);
+                    fseek(fp, meta+(int)str->len, SEEK_SET);
+
+                    char conv[15];
+                    int j=0;
+                    GString *new_meta = g_string_new("!");
+
+                    sprintf(conv, "%d", i_free_spc - size_file);
+                    while (conv[j]!='\0')
+                    {
+                        g_string_append_c (new_meta, conv[j]);
+                        j++;
+                    }
+                    g_string_append (new_meta, ",");
+
+                    j=0;
+                    sprintf(conv, "%d", i_free_addr+(int)data->len);
+                    while (conv[j]!='\0')
+                    {
+                        g_string_append_c (new_meta, conv[j]);
+                        j++;
+                    }
+                    g_string_append (new_meta, ",");
+
+                    printf("ftell = %d\n", (int)ftell(fp));
+                    fprintf(fp, new_meta->str );
+
+
+                    if (num_disk == 4)
+                    {
+                        if (i == 0 || i == 2)
+                        {
+                            fseek(fp,0,SEEK_SET);
+                            fprintf(fp, "%d", meta + (int) str->len + (int)new_meta->len);
+                        }
+
+                        if (i == 1 || i == 3)
+                        {
+                            seek_meta = meta + (int) str->len + (int)new_meta->len;
+                            fseek(fp,0,SEEK_SET);
+                            fprintf(fp, "%d", seek_meta);
+                        }
+                        
+                    }
+                    else if(num_disk<4)
+                    {
+                        seek_meta = meta + (int) str->len + (int)new_meta->len;
+                        fseek(fp,0,SEEK_SET);
+                        fprintf(fp, "%d", seek_meta);
+                    }
+                }
+
+                fclose(fp);
+                return 1;
+
+            }
+
+        }
+
+        if (ftell(fp) > disk_size)
+            return 0;
 
         if (ftell(fp) > start)
         {
@@ -393,7 +688,10 @@ int use_removed_space(int i, int size_file, const gchar *src, const gchar *key, 
             fclose(fp);
             return 0;
         }
+
     }
+
+    return 0;
 }
 
 static gboolean on_handle_put (
@@ -565,6 +863,8 @@ static gboolean on_handle_put (
                         file_size = (int) st.st_size;
 
                         printf("in set 1\n");
+                        printf("     seek_data      %d\n", seek_data);
+                        printf("     80per      %d\n", ((80*disk_size)/100));
 
                         if (file_size <= ((80*disk_size)/100)-seek_data )
                         {
@@ -653,11 +953,13 @@ static gboolean on_handle_put (
                                 //not enough space
                                 if (!use_removed_space(i, file_size, src, key, disk_size))
                                 {
+                                    printf("else1\n");
                                     end_set1 = 1;
                                     seek_meta = 30;
                                     seek_data = 0;
                                     break;
                                 }
+                                printf("use_removed_space1\n");
                             }
                         }
                         else
@@ -665,11 +967,13 @@ static gboolean on_handle_put (
                             //not enough space
                             if (!use_removed_space(i, file_size, src, key, disk_size))
                             {
+                                printf("else2\n");
                                 end_set1 = 1;
                                 seek_meta = 30;
                                 seek_data = 0;
                                 break;
                             }
+                            printf("use_removed_space2\n");
                         }
                     }
                 }
@@ -1127,6 +1431,7 @@ static gboolean on_handle_remove (
     struct stat st;
     FILE *fp;
     char local_key[9]={'\0'};
+    int end = 0;
 
 
 
@@ -1155,17 +1460,22 @@ static gboolean on_handle_remove (
                             {
                                 break;
                             }
-                            if (ftell(fp) > (20*disk_size)/100)
+                            if (ftell(fp) > (20*disk_size)/100 && end != 1)
                             {
                                 err = ENOENT;
                                 break;
                             }
+                            if (ftell(fp) > (20*disk_size)/100 && end == 1)
+                                break;
                         }
-                        if (ftell(fp) > (20*disk_size)/100)
+
+                        if (ftell(fp) > (20*disk_size)/100 && end != 1)
                         {
                             err = ENOENT;
                             break;
                         }
+                        if (ftell(fp) > (20*disk_size)/100 && end == 1)
+                            break;
                     }
 
 
@@ -1179,6 +1489,7 @@ static gboolean on_handle_remove (
                     if (strcmp(key,local_key)==0)
                     {
                         err = 0;
+                        end = 1;
                         char tmp;
 
                         fseek( fp, -8, SEEK_CUR );
@@ -1206,6 +1517,7 @@ static gboolean on_handle_remove (
                                 break;
                             }
                         }
+
 
                         break;
 

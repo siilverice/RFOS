@@ -1,0 +1,8 @@
+#!/bin/bash
+
+./create_disk_1M
+./run
+./rfos put 0000000A file.txt
+./rfos remove 0000000A
+./rfos put 0000000A file1.txt
+./rfos put 0000000B file3.txt
