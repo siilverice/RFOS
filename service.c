@@ -25,7 +25,7 @@ int end_set1 = 0;
 
 void check_old_seek (int mode)
 {
-    printf("Yeahhhhh\n");
+    printf("check_old_seek\n");
 
     int i=0;
 
@@ -35,11 +35,14 @@ void check_old_seek (int mode)
         i = 2;
     }
 
-    GString *old_meta = g_string_new(NULL);
-    GString *old_data = g_string_new(NULL);
+    printf("mode %d\n", i);
+
+    GString *old_meta = g_string_new("NO");
+    GString *old_data = g_string_new("NO");
     FILE *fp;
-    for (i = 0; i < num_disk; i++)
+    for (; i < num_disk; i++)
     {
+        printf("i = %d\n", i);
         fp = fopen(disk[i],"r");
         if (fp != NULL)
         {
@@ -49,11 +52,14 @@ void check_old_seek (int mode)
                 tmp = fgetc(fp);
                 if (ftell(fp) > 30)
                 {
+                    printf("outtttttttttttttttttt\n");
                     break;
                 }
 
                 if (tmp == ',')
                 {
+                    g_string_assign(old_meta,"");
+                    g_string_assign(old_data,"");
                     char tmp1;
                     fseek( fp, 0, SEEK_SET );
                     while (1)
@@ -81,18 +87,25 @@ void check_old_seek (int mode)
 
                     }
                     break;
-                } 
+                }                 
 
             }
            
             fclose(fp);
 
-            if (old_meta != NULL && old_data != NULL)
+            if (strcmp("NO",old_meta->str) && strcmp("NO",old_data->str))
             {
+                printf("old_meta = %s\n", old_meta->str);
+                printf("old_data = %s\n", old_data->str);
                 seek_meta = atoi(old_meta->str);
                 seek_data = atoi(old_data->str);
-                printf("old_meta = %d\n", seek_meta);
-                printf("old_data = %d\n", seek_data);
+                printf("seek_meta = %d\n", seek_meta);
+                printf("seek_data = %d\n", seek_data);
+            }
+            else
+            {
+                printf("seek_meta = %d\n", seek_meta);
+                printf("seek_data = %d\n", seek_data);
             }
 
             break;
@@ -257,13 +270,15 @@ static gboolean on_handle_put (
     const gchar *src) {
 
     /** Your code for Put method here **/
-    guint err;
+    guint err=0;
     if (strlen(key) != 8)
     {
         err = ENAMETOOLONG;
         rfos_complete_put (object, invocation, err);
         return TRUE;
     }
+
+    printf("end_set1 = %d\n", end_set1);
 
     GString *str = g_string_new (NULL);
     int i = 0;
@@ -394,6 +409,7 @@ static gboolean on_handle_put (
         
         if (end_set1 == 0)
         {
+            check_old_seek(1);
             stat(disk[0], &st);
             int set1_size = (int) st.st_size;
             stat(disk[2], &st);
@@ -505,10 +521,6 @@ static gboolean on_handle_put (
                                 seek_meta = 30;
                                 seek_data = 0;
                                 break;
-                                /*err = ENOSPC;
-                                rfos_complete_put(object, invocation, err);
- 
-                                return TRUE;*/
                             }
                         }
                         else
@@ -518,10 +530,6 @@ static gboolean on_handle_put (
                             seek_meta = 30;
                             seek_data = 0;
                             break;
-                            /*err = ENOSPC;
-                            rfos_complete_put(object, invocation, err);
- 
-                            return TRUE;*/
                         }
                     }
                 }
@@ -548,7 +556,7 @@ static gboolean on_handle_put (
             seek_data = 0;*/
             err=0;
             printf("Start set 2\n");
-
+            check_old_seek(2);
 
             stat(disk[0], &st);
             int set1_size = (int) st.st_size;
@@ -636,9 +644,11 @@ static gboolean on_handle_put (
                                 //write " seek_meta,seekdata " to first 8 bytes
                                 fseek( fp, 0, SEEK_SET );
                                 fprintf(fp, "%d", seek_meta + (int)str->len);
+                                fprintf(fp, "," );
                                
                                 fseek( fp, 15, SEEK_SET );
                                 fprintf(fp, "%d", seek_data+file_size);
+                                fprintf(fp, "," );
 
                                 fclose(fp);
                                 
@@ -651,8 +661,8 @@ static gboolean on_handle_put (
                             {
                                 //not enough space
                                 printf("else 1\n");
-                                end_set1 = 2;
                                 err = ENOSPC;
+                                end_set1=0;
                                 rfos_complete_put(object, invocation, err);
  
                                 return TRUE;
@@ -662,8 +672,10 @@ static gboolean on_handle_put (
                         {
                             //not enough space
                             printf("else 2\n");
-                            end_set1 = 2;
+                            printf("%d\n", seek_meta);
+                            printf("%d\n", seek_data);
                             err = ENOSPC;
+                            end_set1=0;
                             rfos_complete_put(object, invocation, err);
  
                             return TRUE;
@@ -681,6 +693,8 @@ static gboolean on_handle_put (
             }
             seek_meta = seek_meta + str->len;
             seek_data = seek_data + file_size;
+
+            end_set1=0;
         }
         
     }
@@ -987,63 +1001,9 @@ int main (int arc, char *argv[])
     printf("%d\n", num_disk);
     
     //add name disk
-    /*GString *old_meta = g_string_new("NO");
-    GString *old_data = g_string_new("NO");
-    FILE *fp;*/
     for (i = 0; i < num_disk; i++)
     {
         disk[i] = argv[i+1];
-
-        /*fp = fopen(disk[i],"r");
-        if (fp != NULL)
-        {
-            char tmp;
-            while(1)
-            {               
-                tmp = fgetc(fp);
-                if (ftell(fp) > 30)
-                {
-                    break;
-                }
-
-                if (tmp == ',')
-                {
-                    char tmp1;
-                    fseek( fp, 0, SEEK_SET );
-                    while (1)
-                    {
-                        tmp1 = fgetc(fp);
-                        if (tmp1 == ',')
-                        {
-                            break;
-                        }
-                        else
-                            g_string_append_c(old_meta,tmp1);
-
-                    }
-
-                    fseek( fp, 15, SEEK_SET );
-                    while (1)
-                    {
-                        tmp1 = fgetc(fp);
-                        if (tmp1 == ',')
-                        {
-                            break;
-                        }
-                        else
-                            g_string_append_c(old_data,tmp1);
-
-                    }
-                    break;
-                } 
-
-            }
-
-            fclose(fp);
-
-            printf("old_meta = %s\n", old_meta->str);
-            printf("old_data = %s\n", old_data->str);
-        }*/
     }
 
     check_old_seek(1);
