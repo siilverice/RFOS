@@ -377,7 +377,7 @@ int use_removed_space(int i, int size_file, const gchar *src, const gchar *key, 
                                 g_string_append_c (new_meta, conv[j]);
                                 j++;
                             }
-                            g_string_append (new_meta, ",");
+                            g_string_append (new_meta, "|");
 
 
                             printf("i_free_spc = %d\n", i_free_spc);
@@ -502,7 +502,7 @@ int use_removed_space(int i, int size_file, const gchar *src, const gchar *key, 
                         g_string_append_c (new_meta, conv[j]);
                         j++;
                     }
-                    g_string_append (new_meta, ",");
+                    g_string_append (new_meta, "|");
 
                     fprintf(fp, new_meta->str );
                     if (i == 1 || i == 3)
@@ -640,7 +640,7 @@ int use_removed_space(int i, int size_file, const gchar *src, const gchar *key, 
                         g_string_append_c (new_meta, conv[j]);
                         j++;
                     }
-                    g_string_append (new_meta, ",");
+                    g_string_append (new_meta, "|");
 
                     printf("ftell = %d\n", (int)ftell(fp));
                     fprintf(fp, new_meta->str );
@@ -694,6 +694,114 @@ int use_removed_space(int i, int size_file, const gchar *src, const gchar *key, 
     return 0;
 }
 
+int chk_redundence_key (const gchar *key)
+{
+    int i = 0;
+    int disk_size=0;
+    struct stat st;
+    FILE *fp;
+    char local_key[9]={'\0'};
+    int end = 0;
+
+
+    for (i = 0; i < num_disk; i++)
+    {
+        printf("%d\n", i);
+        fp = fopen(disk[i],"r+");
+        if (fp!=NULL)
+        {
+            //disk ok
+            stat(disk[i], &st);
+            disk_size = (int) st.st_size;
+            int j=0;
+            int k=0;
+            for (j = 0; ; j++)
+            {
+                    
+                if (j==0)
+                    //first set
+                    fseek( fp, 30, SEEK_SET );
+
+                else
+                {
+                    while(1)
+                    {
+                        if (fgetc(fp)=='|')
+                        {
+                            break;
+                        }
+                        if (ftell(fp) > (20*disk_size)/100 && end != 1)
+                        {
+                            return 0;
+                        }
+                        if (ftell(fp) > (20*disk_size)/100 && end == 1)
+                            return 1;
+                    }
+
+                    if (ftell(fp) > (20*disk_size)/100 && end != 1)
+                    {
+                        return 0;
+                    }
+                    if (ftell(fp) > (20*disk_size)/100 && end == 1)
+                        return 1;
+                }
+
+
+                for (k = 0; k < 8; k++)
+                {
+                    //get key in meta data
+                    local_key[k] = fgetc(fp);
+                }
+
+                //0000000A0,738861,1429868783|
+                if (strcmp(key,local_key)==0)
+                {
+                    printf("matchhhhhh %d\n", i);
+                    end = 1;
+                    char tmp;
+
+                    fseek( fp, -8, SEEK_CUR );
+                    for (k = 0; k < 8; k++)
+                    {
+                        fwrite("-",1,1,fp);
+                    }
+
+                    while(1)
+                    {
+                        tmp = fgetc(fp);
+                        if (tmp ==',')
+                        {
+                            //end of addr
+                            break;
+                        }
+                    }
+
+                    while(1)
+                    {
+                        tmp = fgetc(fp);
+                        if (tmp ==',')
+                        {
+                            //end of size
+                            break;
+                        }
+                    }
+
+
+                    break;
+
+                }
+            }
+        }
+    }
+
+    fclose(fp);
+
+    if (end == 1)
+        return 1;
+    else
+        return 0;
+}
+
 static gboolean on_handle_put (
     RFOS *object,
     GDBusMethodInvocation *invocation,
@@ -722,7 +830,22 @@ static gboolean on_handle_put (
     stat(src, &st);
     file_size = (int) st.st_size;
 
-    if (num_disk<4)
+
+    if (chk_redundence_key(key))
+    {
+        printf("chk_redundence_key\n");
+        for (i = 0; i < num_disk; i++)
+        {
+            stat(disk[i], &st);
+            disk_size = (int) st.st_size;
+
+            if (!use_removed_space(i, file_size, src, key, disk_size))
+                err = ENOSPC;
+
+        }
+    }
+
+    else if (num_disk<4)
     {
         for (i = 0; i < num_disk; i++)
         {
@@ -1147,7 +1270,6 @@ static gboolean on_handle_put (
         
     }
 
-    printf("%d\n", err);
 
     /** End of Put method execution, returning values **/
     rfos_complete_put(object, invocation, err);
